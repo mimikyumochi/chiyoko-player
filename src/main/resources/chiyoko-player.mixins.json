@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "package": "lgbt.faith.chiyoko.player.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "EnchantmentScreenMixin",
+    "AbstractContainerScreenAccessor",
+    "AbstractContainerMenuMixin",
+    "LocalPlayerAccessor",
+    "DropObserverMixin",
+    "AnvilScreenMixin",
+    "AnvilMenuMixin",
+    "EnchantButtonMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

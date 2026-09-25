@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "chiyoko-player",
+  "version": "${version}",
+  "name": "chiyoko-player",
+  "description": "Cracks the player's enchanting seed and entity RNG to predict future enchantment table rolls.",
+  "authors": [
+    "sleepyfaith"
+  ],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/chiyoko-player/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "lgbt.faith.chiyoko.player.client.ChiyokoPlayerClient"
+    ],
+    "main": [
+      "lgbt.faith.chiyoko.player.ChiyokoPlayer"
+    ]
+  },
+  "mixins": [
+    "chiyoko-player.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-language-kotlin": ">=${kotlin_loader_version}",
+    "fabric-api": "*",
+    "minecraft": "~${minecraft_version}"
+  }
+}
