@@ -1,6 +1,8 @@
-# Chiyoko Player
+# Chiyoko: Player RNG
 
 Chiyoko Player cracks the player's RNG and predicts enchanting table and anvil outcomes before they happen by simulating the RNG exactly as minecraft does.
+
+- loot prediction (wither skeletons, fishing, bartering, vaults and more) lives in [Chiyoko: Loot Visualiser](https://github.com/mimikyumochi/chiyoko-loot)
 
 ---
 
