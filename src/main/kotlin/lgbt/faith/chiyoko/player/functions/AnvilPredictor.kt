@@ -1,7 +1,7 @@
 package lgbt.faith.chiyoko.player.functions
 
 import lgbt.faith.chiyoko.player.rand.LCG
-import net.minecraft.client.Minecraft
+import net.minecraft.client.MinecraftClient
 
 object AnvilPredictor {
     sealed interface Prediction {
@@ -18,9 +18,9 @@ object AnvilPredictor {
     private const val MAX_DROPS = 64 * 36
 
     fun predict(): Prediction? {
-        val player = Minecraft.getInstance().player ?: return null
+        val player = MinecraftClient.getInstance().player ?: return null
         // creative never chips or rolls
-        if (player.hasInfiniteMaterials()) return null
+        if (player.isInCreativeMode()) return null
         val base = EnchantPredictor.entityLCG?.copy() ?: return null
 
         if (!chips(base.copy())) {

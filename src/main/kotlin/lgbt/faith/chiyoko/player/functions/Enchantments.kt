@@ -1,7 +1,7 @@
 package lgbt.faith.chiyoko.player.functions
 
-import net.minecraft.world.item.Item
-import net.minecraft.world.item.Items
+import net.minecraft.item.Item
+import net.minecraft.item.Items
 
 object Enchantability {
     const val WOOD        = 15

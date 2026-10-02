@@ -1,9 +1,9 @@
 package lgbt.faith.chiyoko.player.functions
 
 import lgbt.faith.chiyoko.player.rand.LCG
-import net.minecraft.client.Minecraft
-import net.minecraft.core.registries.Registries
-import net.minecraft.world.inventory.EnchantmentMenu
+import net.minecraft.client.MinecraftClient
+import net.minecraft.registry.RegistryKeys
+import net.minecraft.screen.EnchantmentScreenHandler
 
 object XpSeedCracker {
     var lastLower16: Int = -1
@@ -12,7 +12,7 @@ object XpSeedCracker {
 
     fun getOrCrackSeed(
         partialSeed: Int,
-        menu: EnchantmentMenu,
+        menu: EnchantmentScreenHandler,
         enchantability: Int,
         eligibleEnchantments: Set<String>,
         isBook: Boolean
@@ -29,15 +29,15 @@ object XpSeedCracker {
         }
 
         val base16 = lower16 and 0xFFFF
-        val validSlots = (0..2).filter { menu.costs[it] > 0 && menu.enchantClue[it] != -1 }
+        val validSlots = (0..2).filter { menu.enchantmentPower[it] > 0 && menu.enchantmentId[it] != -1 }
 
         if (validSlots.isEmpty()) {
             return null
         }
 
-        val mc = Minecraft.getInstance()
-        val level = mc.level ?: return null
-        val registry = level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).asHolderIdMap()
+        val mc = MinecraftClient.getInstance()
+        val level = mc.world ?: return null
+        val registry = level.registryManager.getOrThrow(RegistryKeys.ENCHANTMENT).indexedEntries
 
         val candidatesToTest = possibleSeeds.ifEmpty {
             (0..65535).map { (it shl 16) or base16 }
@@ -56,7 +56,7 @@ object XpSeedCracker {
                 val c1 = EnchantFunctions.getSimulatedCost(costRand, 1, b, enchantability)
                 val c2 = EnchantFunctions.getSimulatedCost(costRand, 2, b, enchantability)
 
-                if (c0 == menu.costs[0] && c1 == menu.costs[1] && c2 == menu.costs[2]) {
+                if (c0 == menu.enchantmentPower[0] && c1 == menu.enchantmentPower[1] && c2 == menu.enchantmentPower[2]) {
                     bestB = b
                     break
                 }
@@ -73,7 +73,7 @@ object XpSeedCracker {
                     rng = rand,
                     enchantability = enchantability,
                     eligibleIds = eligibleEnchantments,
-                    baseCost = menu.costs[i],
+                    baseCost = menu.enchantmentPower[i],
                     isBook = isBook
                 )
 
@@ -84,9 +84,9 @@ object XpSeedCracker {
 
                 val clueIndex = rand.nextInt(results.size)
                 val predictedClue = results[clueIndex]
-                val predictedId = registry.getId(predictedClue.enchantment)
+                val predictedId = registry.getRawId(predictedClue.enchantment)
 
-                if (predictedId != menu.enchantClue[i] || predictedClue.level != menu.levelClue[i]) {
+                if (predictedId != menu.enchantmentId[i] || predictedClue.level != menu.enchantmentLevel[i]) {
                     isMatch = false
                     break
                 }

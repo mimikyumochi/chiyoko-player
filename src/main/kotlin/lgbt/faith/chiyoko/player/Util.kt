@@ -2,10 +2,10 @@ package lgbt.faith.chiyoko.player
 
 import lgbt.faith.chiyoko.player.functions.EligibleEnchantments
 import lgbt.faith.chiyoko.player.functions.Enchantability
-import net.minecraft.ChatFormatting
-import net.minecraft.client.Minecraft
-import net.minecraft.network.chat.Component
-import net.minecraft.world.item.Item
+import net.minecraft.util.Formatting
+import net.minecraft.client.MinecraftClient
+import net.minecraft.text.Text
+import net.minecraft.item.Item
 
 data class ItemEnchantData(
     val enchantability: Int,
@@ -27,7 +27,7 @@ data class ItemEnchantData(
 // lang files have no plurals so counted keys end in .one or .other
 fun pluralKey(key: String, count: Int) = if (count == 1) "$key.one" else "$key.other"
 
-fun sendOverlay(key: String, color: ChatFormatting = ChatFormatting.WHITE, vararg args: Any) {
-    val mc = Minecraft.getInstance()
-    mc.execute { mc.player?.sendOverlayMessage(Component.translatable(key, *args).withStyle(color)) }
+fun sendOverlay(key: String, color: Formatting = Formatting.WHITE, vararg args: Any) {
+    val mc = MinecraftClient.getInstance()
+    mc.execute { mc.player?.sendMessage(Text.translatable(key, *args).formatted(color), true) }
 }

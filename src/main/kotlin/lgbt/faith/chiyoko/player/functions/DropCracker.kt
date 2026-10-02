@@ -5,11 +5,11 @@ import lgbt.faith.chiyoko.player.mixin.LocalPlayerAccessor
 import lgbt.faith.chiyoko.player.pluralKey
 import lgbt.faith.chiyoko.player.rand.LCG
 import lgbt.faith.chiyoko.player.sendOverlay
-import net.minecraft.ChatFormatting
-import net.minecraft.client.Minecraft
-import net.minecraft.network.chat.Component
-import net.minecraft.util.Mth
-import net.minecraft.world.phys.Vec3
+import net.minecraft.util.Formatting
+import net.minecraft.client.MinecraftClient
+import net.minecraft.text.Text
+import net.minecraft.util.math.MathHelper
+import net.minecraft.util.math.Vec3d
 import org.slf4j.LoggerFactory
 import java.util.UUID
 import java.util.concurrent.Executors
@@ -26,7 +26,7 @@ import kotlin.math.sqrt
 
 object DropCracker {
     // rotation is null when the player turned just before the drop
-    data class DropObservation(val xRot: Float?, val yRot: Float?, val movement: Vec3)
+    data class DropObservation(val xRot: Float?, val yRot: Float?, val movement: Vec3d)
 
     private data class PlayerSnapshot(
         val entityId: Int,
@@ -65,7 +65,7 @@ object DropCracker {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "chiyoko-drop-cracker").apply { isDaemon = true } }
 
     // resets whenever something might have used player rng
-    fun tick(mc: Minecraft) {
+    fun tick(mc: MinecraftClient) {
         val player = mc.player ?: return
 
         val accessor = player as LocalPlayerAccessor
@@ -77,11 +77,11 @@ object DropCracker {
 
         val snapshot = PlayerSnapshot(
             entityId = player.id,
-            dimension = player.level().dimension(),
+            dimension = player.entityWorld.registryKey,
             x = player.x, y = player.y, z = player.z,
             health = player.health,
             absorption = player.absorptionAmount,
-            food = player.foodData.foodLevel,
+            food = player.hungerManager.foodLevel,
             xpLevel = player.experienceLevel,
             xpProgress = player.experienceProgress,
             usingItem = player.isUsingItem,
@@ -115,7 +115,7 @@ object DropCracker {
         generation++
         EnchantPredictor.entityLCG = null
         if (reason != null && hadProgress) {
-            sendOverlay("chiyoko-player.rng.reset", ChatFormatting.YELLOW, Component.translatable("chiyoko-player.rng.reset.$reason"))
+            sendOverlay("chiyoko-player.rng.reset", Formatting.YELLOW, Text.translatable("chiyoko-player.rng.reset.$reason"))
         }
     }
 
@@ -141,8 +141,8 @@ object DropCracker {
     }
 
     // returns true if the item was dropped by us
-    fun onItemSpawned(x: Double, y: Double, z: Double, uuid: UUID, movement: Vec3): Boolean {
-        val player = Minecraft.getInstance().player ?: return false
+    fun onItemSpawned(x: Double, y: Double, z: Double, uuid: UUID, movement: Vec3d): Boolean {
+        val player = MinecraftClient.getInstance().player ?: return false
         val handY = player.eyeY - 0.3f
         if (abs(x - player.x) > POSITION_EPSILON || abs(y - handY) > POSITION_EPSILON || abs(z - player.z) > POSITION_EPSILON) {
             return false
@@ -153,8 +153,8 @@ object DropCracker {
         val settled = System.currentTimeMillis() - lastRotChangeMs >= ROTATION_SETTLE_MS
         val observation = if (settled) {
             DropObservation(
-                Mth.wrapDegrees(accessor.chiyoko_getXRotLast()),
-                Mth.wrapDegrees(accessor.chiyoko_getYRotLast()),
+                MathHelper.wrapDegrees(accessor.chiyoko_getXRotLast()),
+                MathHelper.wrapDegrees(accessor.chiyoko_getYRotLast()),
                 movement
             )
         } else {
@@ -169,10 +169,10 @@ object DropCracker {
 
         if (sharedRng) return true
         // one match can be chance so wait for a second one
-        if (usesSharedRng(uuid, movement, player.xRot, player.yRot) && ++sharedRngHits >= SHARED_RNG_HITS) {
+        if (usesSharedRng(uuid, movement, player.pitch, player.yaw) && ++sharedRngHits >= SHARED_RNG_HITS) {
             sharedRng = true
             reset()
-            sendOverlay("chiyoko-player.rng.shared", ChatFormatting.RED)
+            sendOverlay("chiyoko-player.rng.shared", Formatting.RED)
             return true
         }
 
@@ -183,7 +183,7 @@ object DropCracker {
     // paper gives every entity one shared random so other entities use it between drops
     // the item uuid comes from that random right before the drop so a matching uuid means shared rng
     // this doesnt need the exact server rotation since the base velocity is just 0.3 times the look vector
-    private fun usesSharedRng(uuid: UUID, movement: Vec3, xRot: Float, yRot: Float): Boolean {
+    private fun usesSharedRng(uuid: UUID, movement: Vec3d, xRot: Float, yRot: Float): Boolean {
         val afterUuid = stateFromUuid(uuid)
         if (afterUuid == null) {
             LOGGER.info("shared rng check: uuid not from a java random")
@@ -209,7 +209,7 @@ object DropCracker {
 
             val impliedXRot = Math.toDegrees(asin((-by / 0.3).coerceIn(-1.0, 1.0)))
             val impliedYRot = Math.toDegrees(atan2(-bx, bz))
-            val angle = max(abs(Mth.wrapDegrees(impliedXRot - xRot.toDouble())), abs(Mth.wrapDegrees(impliedYRot - yRot.toDouble())))
+            val angle = max(abs(MathHelper.wrapDegrees(impliedXRot - xRot.toDouble())), abs(MathHelper.wrapDegrees(impliedYRot - yRot.toDouble())))
             if (angle < best) {
                 best = angle
                 bestGap = gap
@@ -247,7 +247,7 @@ object DropCracker {
                 return
             }
             reset()
-            sendOverlay("chiyoko-player.rng.desynced", ChatFormatting.YELLOW)
+            sendOverlay("chiyoko-player.rng.desynced", Formatting.YELLOW)
         }
 
         observations.add(observation)
@@ -260,13 +260,13 @@ object DropCracker {
         val snapshot = observations.toList()
         val bits = snapshot.sumOf { constraintsFor(it)?.bits ?: 0.0 }
         if (bits < BITS_TO_SOLVE) {
-            sendOverlay(pluralKey("chiyoko-player.rng.progress", snapshot.size), ChatFormatting.AQUA, snapshot.size, bits.toInt())
+            sendOverlay(pluralKey("chiyoko-player.rng.progress", snapshot.size), Formatting.AQUA, snapshot.size, bits.toInt())
             return
         }
 
         solving = true
         val solveGeneration = generation
-        sendOverlay("chiyoko-player.rng.solving", ChatFormatting.AQUA)
+        sendOverlay("chiyoko-player.rng.solving", Formatting.AQUA)
 
         executor.execute {
             val candidates = try {
@@ -276,7 +276,7 @@ object DropCracker {
                 LongArray(0)
             }
 
-            val mc = Minecraft.getInstance()
+            val mc = MinecraftClient.getInstance()
             mc.execute { onSolved(solveGeneration, snapshot.size, candidates) }
         }
     }
@@ -300,16 +300,16 @@ object DropCracker {
             matches.size == 1 -> {
                 EnchantPredictor.entityLCG = matches.first()
                 observations.clear()
-                sendOverlay("chiyoko-player.rng.cracked", ChatFormatting.GREEN)
+                sendOverlay("chiyoko-player.rng.cracked", Formatting.GREEN)
             }
             matches.isEmpty() && candidates.size < MAX_CANDIDATES -> {
                 // nothing matched so the first drop was probably bad
                 observations.removeFirstOrNull()
-                sendOverlay("chiyoko-player.rng.inconsistent", ChatFormatting.YELLOW)
+                sendOverlay("chiyoko-player.rng.inconsistent", Formatting.YELLOW)
                 trySolve()
             }
             else -> {
-                sendOverlay(pluralKey("chiyoko-player.rng.candidates", matches.size), ChatFormatting.AQUA, matches.size)
+                sendOverlay(pluralKey("chiyoko-player.rng.candidates", matches.size), Formatting.AQUA, matches.size)
                 if (observations.size > solvedCount) trySolve()
             }
         }
@@ -393,10 +393,10 @@ object DropCracker {
     }
 
     private fun baseVelocity(xRot: Float, yRot: Float): Triple<Double, Float, Double> {
-        val sinX = Mth.sin((xRot * (Math.PI / 180.0).toFloat()).toDouble())
-        val cosX = Mth.cos((xRot * (Math.PI / 180.0).toFloat()).toDouble())
-        val sinY = Mth.sin((yRot * (Math.PI / 180.0).toFloat()).toDouble())
-        val cosY = Mth.cos((yRot * (Math.PI / 180.0).toFloat()).toDouble())
+        val sinX = MathHelper.sin((xRot * (Math.PI / 180.0).toFloat()).toDouble())
+        val cosX = MathHelper.cos((xRot * (Math.PI / 180.0).toFloat()).toDouble())
+        val sinY = MathHelper.sin((yRot * (Math.PI / 180.0).toFloat()).toDouble())
+        val cosY = MathHelper.cos((yRot * (Math.PI / 180.0).toFloat()).toDouble())
         return Triple(
             (-sinY * cosX * 0.3f).toDouble(),
             -sinX * 0.3f + 0.1f,
@@ -405,7 +405,7 @@ object DropCracker {
     }
 
     // max LpVec3 error for this vector
-    private fun quantization(movement: Vec3): Double {
+    private fun quantization(movement: Vec3d): Double {
         val scale = ceil(max(abs(movement.x), max(abs(movement.y), abs(movement.z)))).coerceAtLeast(1.0)
         return scale / 32766.0
     }

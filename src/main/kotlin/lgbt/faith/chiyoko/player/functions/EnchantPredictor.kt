@@ -2,9 +2,9 @@ package lgbt.faith.chiyoko.player.functions
 
 import lgbt.faith.chiyoko.player.ItemEnchantData
 import lgbt.faith.chiyoko.player.rand.LCG
-import net.minecraft.client.Minecraft
-import net.minecraft.world.item.Item
-import net.minecraft.world.item.Items
+import net.minecraft.client.MinecraftClient
+import net.minecraft.item.Item
+import net.minecraft.item.Items
 import org.slf4j.LoggerFactory
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.SynchronousQueue
@@ -62,7 +62,7 @@ object EnchantPredictor {
                     Outcome.Failed
                 }
 
-                val mc = Minecraft.getInstance()
+                val mc = MinecraftClient.getInstance()
                 mc.execute {
                     onDone(if (outcome is Outcome.Found && entityLCG?.seed != base.seed) Outcome.Stale else outcome)
                 }
@@ -106,7 +106,7 @@ object EnchantPredictor {
 
                     val matched = predicted.size >= targets.size && targets.all { target ->
                         predicted.any {
-                            it.enchantment.registeredName.replace("minecraft:", "") == target.enchantment.id &&
+                            it.enchantment.idAsString.replace("minecraft:", "") == target.enchantment.id &&
                                     it.level == target.level
                         }
                     }

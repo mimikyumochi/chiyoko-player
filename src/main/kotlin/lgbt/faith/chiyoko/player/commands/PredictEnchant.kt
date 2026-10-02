@@ -12,14 +12,14 @@ import lgbt.faith.chiyoko.player.functions.EnchantTarget
 import lgbt.faith.chiyoko.player.functions.EligibleEnchantments
 import lgbt.faith.chiyoko.player.functions.Enchantment
 import lgbt.faith.chiyoko.player.pluralKey
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
-import net.minecraft.ChatFormatting
-import net.minecraft.commands.SharedSuggestionProvider
-import net.minecraft.core.registries.BuiltInRegistries
-import net.minecraft.network.chat.Component
-import net.minecraft.resources.Identifier
-import net.minecraft.world.item.Item
+import net.minecraft.util.Formatting
+import net.minecraft.command.CommandSource
+import net.minecraft.registry.Registries
+import net.minecraft.text.Text
+import net.minecraft.util.Identifier
+import net.minecraft.item.Item
 import java.util.concurrent.CompletableFuture
 
 object PredictEnchant {
@@ -27,9 +27,9 @@ object PredictEnchant {
     fun register(dispatcher: CommandDispatcher<FabricClientCommandSource>) {
 
         dispatcher.register(
-            ClientCommands.literal("predict")
+            ClientCommandManager.literal("predict")
                 .then(
-                    ClientCommands.argument(
+                    ClientCommandManager.argument(
                         "item",
                         StringArgumentType.word()
                     )
@@ -43,7 +43,7 @@ object PredictEnchant {
 
     // builds enchant and level arguments for up to 3 enchants
     private fun enchantArgument(index: Int): RequiredArgumentBuilder<FabricClientCommandSource, String> {
-        val levelArgument = ClientCommands.argument(
+        val levelArgument = ClientCommandManager.argument(
             "level$index",
             IntegerArgumentType.integer(1)
         )
@@ -58,7 +58,7 @@ object PredictEnchant {
             levelArgument.then(enchantArgument(index + 1))
         }
 
-        return ClientCommands.argument(
+        return ClientCommandManager.argument(
             "enchant$index",
             StringArgumentType.word()
         )
@@ -69,8 +69,8 @@ object PredictEnchant {
     }
 
     private fun itemFromName(itemName: String): Item? {
-        return BuiltInRegistries.ITEM
-            .get(Identifier.withDefaultNamespace(itemName))
+        return Registries.ITEM
+            .getEntry(Identifier.ofVanilla(itemName))
             .map { it.value() }
             .orElse(null)
     }
@@ -80,11 +80,11 @@ object PredictEnchant {
         builder: SuggestionsBuilder
     ): CompletableFuture<Suggestions> {
 
-        val items = BuiltInRegistries.ITEM.keySet()
+        val items = Registries.ITEM.ids
             .filter { id ->
 
-                val item = BuiltInRegistries.ITEM
-                    .get(id)
+                val item = Registries.ITEM
+                    .getEntry(id)
                     .map { it.value() }
                     .orElse(null)
 
@@ -95,7 +95,7 @@ object PredictEnchant {
             }
             .map { it.path }
 
-        return SharedSuggestionProvider.suggest(
+        return CommandSource.suggestMatching(
             items,
             builder
         )
@@ -127,7 +127,7 @@ object PredictEnchant {
             .filter { it !in used }
 
 
-        return SharedSuggestionProvider.suggest(
+        return CommandSource.suggestMatching(
             enchants,
             builder
         )
@@ -145,7 +145,7 @@ object PredictEnchant {
         val enchant = Enchantment[enchantName]
             ?: return builder.buildFuture()
 
-        return SharedSuggestionProvider.suggest(
+        return CommandSource.suggestMatching(
             (1..enchant.maxLevel)
                 .map { it.toString() },
             builder
@@ -163,8 +163,8 @@ object PredictEnchant {
 
         if (item == null) {
             source.sendError(
-                Component.translatable("chiyoko-player.predict.unknown_item", itemName)
-                    .withStyle(ChatFormatting.RED)
+                Text.translatable("chiyoko-player.predict.unknown_item", itemName)
+                    .formatted(Formatting.RED)
             )
             return 0
         }
@@ -178,8 +178,8 @@ object PredictEnchant {
 
         if (targets.size != targets.toSet().size) {
             source.sendError(
-                Component.translatable("chiyoko-player.predict.duplicate")
-                    .withStyle(ChatFormatting.RED)
+                Text.translatable("chiyoko-player.predict.duplicate")
+                    .formatted(Formatting.RED)
             )
             return 0
         }
@@ -188,45 +188,45 @@ object PredictEnchant {
             when (outcome) {
                 is EnchantPredictor.Outcome.Found -> source.sendFeedback(resultMessage(outcome.result))
                 EnchantPredictor.Outcome.NotFound -> source.sendFeedback(
-                    Component.translatable("chiyoko-player.predict.no_result").withStyle(ChatFormatting.RED)
+                    Text.translatable("chiyoko-player.predict.no_result").formatted(Formatting.RED)
                 )
                 EnchantPredictor.Outcome.TimedOut -> source.sendError(
-                    Component.translatable("chiyoko-player.predict.timed_out").withStyle(ChatFormatting.RED)
+                    Text.translatable("chiyoko-player.predict.timed_out").formatted(Formatting.RED)
                 )
                 EnchantPredictor.Outcome.Failed -> source.sendError(
-                    Component.translatable("chiyoko-player.predict.failed").withStyle(ChatFormatting.RED)
+                    Text.translatable("chiyoko-player.predict.failed").formatted(Formatting.RED)
                 )
                 EnchantPredictor.Outcome.Stale -> source.sendError(
-                    Component.translatable("chiyoko-player.predict.stale").withStyle(ChatFormatting.YELLOW)
+                    Text.translatable("chiyoko-player.predict.stale").formatted(Formatting.YELLOW)
                 )
             }
         }
 
         when (start) {
             EnchantPredictor.Start.NOT_CRACKED -> {
-                source.sendError(Component.translatable("chiyoko-player.predict.not_cracked").withStyle(ChatFormatting.RED))
+                source.sendError(Text.translatable("chiyoko-player.predict.not_cracked").formatted(Formatting.RED))
                 return 0
             }
             EnchantPredictor.Start.BUSY -> {
-                source.sendError(Component.translatable("chiyoko-player.predict.busy").withStyle(ChatFormatting.RED))
+                source.sendError(Text.translatable("chiyoko-player.predict.busy").formatted(Formatting.RED))
                 return 0
             }
             EnchantPredictor.Start.STARTED -> source.sendFeedback(
-                Component.translatable("chiyoko-player.predict.running").withStyle(ChatFormatting.GRAY)
+                Text.translatable("chiyoko-player.predict.running").formatted(Formatting.GRAY)
             )
         }
 
         return 1
     }
 
-    private fun resultMessage(result: EnchantPredictor.Result): Component {
+    private fun resultMessage(result: EnchantPredictor.Result): Text {
         val stacks = result.drops / 64
         val remainder = result.drops % 64
-        val stacksText = Component.translatable(pluralKey("chiyoko-player.predict.stack", stacks), stacks)
+        val stacksText = Text.translatable(pluralKey("chiyoko-player.predict.stack", stacks), stacks)
         val dropsText = when {
-            stacks == 0 -> Component.literal("$remainder")
+            stacks == 0 -> Text.literal("$remainder")
             remainder == 0 -> stacksText
-            else -> Component.translatable("chiyoko-player.predict.stacks_and", stacksText, remainder)
+            else -> Text.translatable("chiyoko-player.predict.stacks_and", stacksText, remainder)
         }
         // whole stacks read as drop 2 stacks otherwise the item count after the stacks decides the plural
         val dropKey = if (stacks > 0 && remainder == 0) {
@@ -235,19 +235,19 @@ object PredictEnchant {
             pluralKey("chiyoko-player.predict.step.drop", remainder)
         }
 
-        fun step(number: Int, key: String, vararg args: Component) =
-            Component.literal("$number. ").withStyle(ChatFormatting.DARK_GREEN)
-                .append(Component.translatable(key, *args).withStyle(ChatFormatting.GREEN))
+        fun step(number: Int, key: String, vararg args: Text) =
+            Text.literal("$number. ").formatted(Formatting.DARK_GREEN)
+                .append(Text.translatable(key, *args).formatted(Formatting.GREEN))
                 .append("\n")
 
-        val message = Component.empty()
-            .append(step(1, dropKey, dropsText.withStyle(ChatFormatting.AQUA)))
+        val message = Text.empty()
+            .append(step(1, dropKey, dropsText.formatted(Formatting.AQUA)))
             .append(step(2, pluralKey("chiyoko-player.predict.step.bookshelves", result.bookshelves),
-                Component.literal("${result.bookshelves}").withStyle(ChatFormatting.AQUA)))
+                Text.literal("${result.bookshelves}").formatted(Formatting.AQUA)))
             .append(step(3, "chiyoko-player.predict.step.enchant_once"))
             .append(step(4, "chiyoko-player.predict.step.enchant_slot",
-                Component.translatable("chiyoko-player.predict.slot", result.slot + 1).withStyle(ChatFormatting.AQUA)))
-            .append(Component.translatable("chiyoko-player.predict.warning").withStyle(ChatFormatting.YELLOW))
+                Text.translatable("chiyoko-player.predict.slot", result.slot + 1).formatted(Formatting.AQUA)))
+            .append(Text.translatable("chiyoko-player.predict.warning").formatted(Formatting.YELLOW))
 
         return message
     }

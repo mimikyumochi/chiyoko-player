@@ -6,17 +6,17 @@ import lgbt.faith.chiyoko.player.functions.EnchantFunctions
 import lgbt.faith.chiyoko.player.functions.XpSeedCracker
 import lgbt.faith.chiyoko.player.pluralKey
 import lgbt.faith.chiyoko.player.rand.LCG
-import net.minecraft.ChatFormatting
-import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
-import net.minecraft.client.gui.screens.inventory.EnchantmentScreen
-import net.minecraft.network.chat.CommonComponents
-import net.minecraft.network.chat.Component
-import net.minecraft.world.inventory.AbstractContainerMenu
-import net.minecraft.world.inventory.EnchantmentMenu
-import net.minecraft.world.item.Items
-import net.minecraft.world.item.enchantment.Enchantment
+import net.minecraft.util.Formatting
+import net.minecraft.client.MinecraftClient
+import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.screen.ingame.HandledScreen
+import net.minecraft.client.gui.screen.ingame.EnchantmentScreen
+import net.minecraft.screen.ScreenTexts
+import net.minecraft.text.Text
+import net.minecraft.screen.ScreenHandler
+import net.minecraft.screen.EnchantmentScreenHandler
+import net.minecraft.item.Items
+import net.minecraft.enchantment.Enchantment
 import org.spongepowered.asm.mixin.Mixin
 import org.spongepowered.asm.mixin.gen.Accessor
 import org.spongepowered.asm.mixin.injection.At
@@ -25,31 +25,31 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture
 import java.util.*
 
-@Mixin(AbstractContainerScreen::class)
+@Mixin(HandledScreen::class)
 interface AbstractContainerScreenAccessor {
-    @Accessor("menu")
-    fun chiyoko_getMenu(): AbstractContainerMenu
+    @Accessor("handler")
+    fun chiyoko_getMenu(): ScreenHandler
 
-    @Accessor("imageWidth")
+    @Accessor("backgroundWidth")
     fun chiyoko_getImageWidth(): Int
 }
 
-@Mixin(AbstractContainerMenu::class)
+@Mixin(ScreenHandler::class)
 abstract class AbstractContainerMenuMixin {
 
-    @Inject(method = ["setData"], at = [At("TAIL")])
+    @Inject(method = ["setProperty"], at = [At("TAIL")])
     private fun onSetData(id: Int, data: Int, ci: CallbackInfo) {
-        val menu = (this as? AbstractContainerMenu) as? EnchantmentMenu ?: return
+        val menu = (this as? ScreenHandler) as? EnchantmentScreenHandler ?: return
 
         if (id == 3 && data != 0) {
             ChiyokoPlayerClient.partialXpSeed = data
         }
 
         if (id == 9 && ChiyokoPlayerClient.partialXpSeed != null) {
-            val itemStack = menu.getSlot(0).item
+            val itemStack = menu.getSlot(0).stack
             if (itemStack.isEmpty) return
 
-            if (menu.costs.all { it == 0 } || menu.enchantClue.all { it == -1 }) return
+            if (menu.enchantmentPower.all { it == 0 } || menu.enchantmentId.all { it == -1 }) return
 
             val (enchantability, eligibleEnchantments) = ItemEnchantData.of(itemStack.item)
 
@@ -72,19 +72,19 @@ abstract class AbstractContainerMenuMixin {
 abstract class EnchantmentScreenMixin {
 
     @Inject(
-        method = ["extractRenderState"],
-        at = [At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;setComponentTooltipForNextFrame(Lnet/minecraft/client/gui/Font;Ljava/util/List;II)V", shift = At.Shift.BEFORE)],
+        method = ["render"],
+        at = [At(value = "INVOKE", target = "Lnet/minecraft/client/gui/DrawContext;drawTooltip(Lnet/minecraft/client/font/TextRenderer;Ljava/util/List;II)V", shift = At.Shift.BEFORE)],
         locals = LocalCapture.CAPTURE_FAILHARD
     )
     private fun injectFullEnchantData(
-        graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTicks: Float, ci: CallbackInfo,
-        a: Float, infiniteMaterials: Boolean, gold: Int, i: Int, minLevel: Int, enchant: Optional<*>, enchantLevel: Int, cost: Int, texts: MutableList<Component>
+        graphics: DrawContext, mouseX: Int, mouseY: Int, partialTicks: Float, ci: CallbackInfo,
+        a: Float, infiniteMaterials: Boolean, gold: Int, i: Int, minLevel: Int, enchant: Optional<*>, enchantLevel: Int, cost: Int, texts: MutableList<Text>
     ) {
-        val mc = Minecraft.getInstance()
+        val mc = MinecraftClient.getInstance()
         val xpSeed = ChiyokoPlayerClient.xpSeed ?: return
 
-        val menu = (this as AbstractContainerScreenAccessor).chiyoko_getMenu() as EnchantmentMenu
-        val itemStack = menu.getSlot(0).item
+        val menu = (this as AbstractContainerScreenAccessor).chiyoko_getMenu() as EnchantmentScreenHandler
+        val itemStack = menu.getSlot(0).stack
         if (itemStack.isEmpty) return
 
         val (enchantability, eligibleEnchantments) = ItemEnchantData.of(itemStack.item)
@@ -96,49 +96,49 @@ abstract class EnchantmentScreenMixin {
             rng = rand,
             enchantability = enchantability,
             eligibleIds = eligibleEnchantments,
-            baseCost = menu.costs[i],
+            baseCost = menu.enchantmentPower[i],
             isBook = itemStack.item == Items.BOOK
         )
 
-        texts.add(CommonComponents.EMPTY)
+        texts.add(ScreenTexts.EMPTY)
 
         val seedCount = XpSeedCracker.possibleSeeds.size
         when {
             seedCount > 1 -> {
                 texts.add(
-                    Component.translatable(pluralKey("chiyoko-player.tooltip.possible_seeds", seedCount), seedCount)
-                        .withStyle(ChatFormatting.YELLOW)
+                    Text.translatable(pluralKey("chiyoko-player.tooltip.possible_seeds", seedCount), seedCount)
+                        .formatted(Formatting.YELLOW)
                 )
                 texts.add(
-                    Component.translatable("chiyoko-player.tooltip.swap_item")
-                        .withStyle(ChatFormatting.RED)
+                    Text.translatable("chiyoko-player.tooltip.swap_item")
+                        .formatted(Formatting.RED)
                 )
                 texts.add(
-                    Component.translatable("chiyoko-player.tooltip.best_guess")
-                        .withStyle(ChatFormatting.DARK_PURPLE)
+                    Text.translatable("chiyoko-player.tooltip.best_guess")
+                        .formatted(Formatting.DARK_PURPLE)
                 )
             }
             seedCount == 0 -> {
                 texts.add(
-                    Component.translatable("chiyoko-player.tooltip.failed")
-                        .withStyle(ChatFormatting.DARK_RED)
+                    Text.translatable("chiyoko-player.tooltip.failed")
+                        .formatted(Formatting.DARK_RED)
                 )
                 return
             }
             else -> {
                 texts.add(
-                    Component.translatable("chiyoko-player.tooltip.predicted")
-                        .withStyle(ChatFormatting.DARK_PURPLE)
+                    Text.translatable("chiyoko-player.tooltip.predicted")
+                        .formatted(Formatting.DARK_PURPLE)
                 )
             }
         }
 
         results.forEach {
             texts.add(
-                Component.translatable(
+                Text.translatable(
                     "container.enchant.clue",
-                    Enchantment.getFullname(it.enchantment, it.level)
-                ).withStyle(ChatFormatting.GRAY)
+                    Enchantment.getName(it.enchantment, it.level)
+                ).formatted(Formatting.GRAY)
             )
         }
     }
