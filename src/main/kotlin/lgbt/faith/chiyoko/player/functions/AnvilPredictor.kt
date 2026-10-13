@@ -21,7 +21,7 @@ object AnvilPredictor {
         val player = MinecraftClient.getInstance().player ?: return null
         // creative never chips or rolls
         if (player.isInCreativeMode()) return null
-        val base = EnchantPredictor.entityLCG?.copy() ?: return null
+        val base = RngTracker.state?.copy() ?: return null
 
         if (!chips(base.copy())) {
             val rolls = base.copy()

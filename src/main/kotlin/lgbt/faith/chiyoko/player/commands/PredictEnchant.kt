@@ -1,28 +1,32 @@
 package lgbt.faith.chiyoko.player.commands
 
 import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
-import com.mojang.brigadier.builder.RequiredArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.Suggestions
 import com.mojang.brigadier.suggestion.SuggestionsBuilder
+import lgbt.faith.chiyoko.player.ItemEnchantData
+import lgbt.faith.chiyoko.player.functions.AutoCracker
 import lgbt.faith.chiyoko.player.functions.EnchantPredictor
 import lgbt.faith.chiyoko.player.functions.EnchantTarget
-import lgbt.faith.chiyoko.player.functions.EligibleEnchantments
 import lgbt.faith.chiyoko.player.functions.Enchantment
 import lgbt.faith.chiyoko.player.pluralKey
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.minecraft.util.Formatting
+import net.minecraft.client.MinecraftClient
 import net.minecraft.command.CommandSource
 import net.minecraft.registry.Registries
 import net.minecraft.text.Text
 import net.minecraft.util.Identifier
 import net.minecraft.item.Item
+import net.minecraft.item.Items
 import java.util.concurrent.CompletableFuture
 
 object PredictEnchant {
+
+    // marks the held item suggestion so CommandSuggestionsMixin can pull it to the top
+    val HELD_ITEM_TOOLTIP: Text = Text.translatable("chiyoko-player.predict.held_item")
 
     fun register(dispatcher: CommandDispatcher<FabricClientCommandSource>) {
 
@@ -36,36 +40,21 @@ object PredictEnchant {
                         .suggests { _, builder ->
                             itemSuggestions(builder)
                         }
-                        .then(enchantArgument(1))
+                        .then(
+                            // any number of "<enchant> <level>" pairs
+                            ClientCommandManager.argument(
+                                "enchants",
+                                StringArgumentType.greedyString()
+                            )
+                                .suggests { ctx, builder ->
+                                    enchantSuggestions(ctx, builder)
+                                }
+                                .executes { ctx ->
+                                    execute(ctx.source, ctx)
+                                }
+                        )
                 )
         )
-    }
-
-    // builds enchant and level arguments for up to 3 enchants
-    private fun enchantArgument(index: Int): RequiredArgumentBuilder<FabricClientCommandSource, String> {
-        val levelArgument = ClientCommandManager.argument(
-            "level$index",
-            IntegerArgumentType.integer(1)
-        )
-            .suggests { ctx, builder ->
-                levelSuggestions(ctx, builder, "enchant$index")
-            }
-            .executes { ctx ->
-                execute(ctx.source, index, ctx)
-            }
-
-        if (index < 3) {
-            levelArgument.then(enchantArgument(index + 1))
-        }
-
-        return ClientCommandManager.argument(
-            "enchant$index",
-            StringArgumentType.word()
-        )
-            .suggests { ctx, builder ->
-                enchantSuggestions(ctx, builder)
-            }
-            .then(levelArgument)
     }
 
     private fun itemFromName(itemName: String): Item? {
@@ -73,6 +62,13 @@ object PredictEnchant {
             .getEntry(Identifier.ofVanilla(itemName))
             .map { it.value() }
             .orElse(null)
+    }
+
+    // enchants the table can put on this item, empty if it cant go in a table at all
+    private fun tableEnchantments(item: Item): Set<String> {
+        if (item == Items.ENCHANTED_BOOK) return emptySet()
+        val (enchantability, eligible) = ItemEnchantData.of(item)
+        return if (enchantability > 0) eligible else emptySet()
     }
 
 
@@ -88,107 +84,114 @@ object PredictEnchant {
                     .map { it.value() }
                     .orElse(null)
 
-                item != null &&
-                        EligibleEnchantments.getEligibleEnchantments(item)
-                            .intersect(EligibleEnchantments.ENCHANT_TABLE)
-                            .isNotEmpty()
+                item != null && tableEnchantments(item).isNotEmpty()
             }
             .map { it.path }
 
-        return CommandSource.suggestMatching(
-            items,
-            builder
-        )
+        // main hand first, then off hand, as long as it can go in the table
+        val player = MinecraftClient.getInstance().player
+        val held = listOfNotNull(player?.mainHandStack?.item, player?.offHandStack?.item)
+            .firstOrNull { tableEnchantments(it).isNotEmpty() }
+            ?.let { Registries.ITEM.getId(it).path }
+
+        val remaining = builder.remainingLowerCase
+        for (name in items) {
+            if (CommandSource.shouldSuggest(remaining, name)) {
+                builder.suggest(name, if (name == held) HELD_ITEM_TOOLTIP else null)
+            }
+        }
+        return builder.buildFuture()
     }
 
 
+    // suggests an enchant or a level depending on where the cursor is in the pair list
     private fun enchantSuggestions(
         ctx: CommandContext<FabricClientCommandSource>,
         builder: SuggestionsBuilder
     ): CompletableFuture<Suggestions> {
 
-        val itemName = StringArgumentType.getString(ctx, "item")
+        val item = itemFromName(StringArgumentType.getString(ctx, "item")) ?: return builder.buildFuture()
 
-        val item = itemFromName(itemName) ?: return builder.buildFuture()
+        val remaining = builder.remaining
+        val tokenStart = remaining.lastIndexOf(' ') + 1
+        val previous = remaining.substring(0, tokenStart).split(' ').filter { it.isNotEmpty() }
+        val tokenBuilder = builder.createOffset(builder.start + tokenStart)
 
+        if (previous.size % 2 == 1) {
+            val enchant = Enchantment[previous.last()] ?: return tokenBuilder.buildFuture()
 
-        val used = buildSet {
-            for (argument in listOf("enchant1", "enchant2")) {
-                try {
-                    add(StringArgumentType.getString(ctx, argument))
-                } catch (_: Exception) {
-                }
-            }
+            return CommandSource.suggestMatching(
+                (1..enchant.maxLevel)
+                    .map { it.toString() },
+                tokenBuilder
+            )
         }
 
+        val chosen = previous.filterIndexed { i, _ -> i % 2 == 0 }.mapNotNull { Enchantment[it] }
 
-        val enchants = EligibleEnchantments.getEligibleEnchantments(item)
-            .intersect(EligibleEnchantments.ENCHANT_TABLE)
-            .filter { it !in used }
-
+        val enchants = tableEnchantments(item)
+            .filter { id ->
+                val enchant = Enchantment[id] ?: return@filter false
+                chosen.all { Enchantment.areCompatible(it, enchant) }
+            }
 
         return CommandSource.suggestMatching(
             enchants,
-            builder
-        )
-    }
-
-
-    private fun levelSuggestions(
-        ctx: CommandContext<FabricClientCommandSource>,
-        builder: SuggestionsBuilder,
-        enchantArgument: String
-    ): CompletableFuture<Suggestions> {
-
-        val enchantName = StringArgumentType.getString(ctx, enchantArgument)
-
-        val enchant = Enchantment[enchantName]
-            ?: return builder.buildFuture()
-
-        return CommandSource.suggestMatching(
-            (1..enchant.maxLevel)
-                .map { it.toString() },
-            builder
+            tokenBuilder
         )
     }
 
 
     private fun execute(
         source: FabricClientCommandSource,
-        count: Int,
         ctx: CommandContext<FabricClientCommandSource>
     ): Int {
+        fun error(key: String, vararg args: Any): Int {
+            source.sendError(Text.translatable(key, *args).formatted(Formatting.RED))
+            return 0
+        }
+
         val itemName = StringArgumentType.getString(ctx, "item")
         val item = itemFromName(itemName)
+        val allowed = item?.let { tableEnchantments(it) }.orEmpty()
 
-        if (item == null) {
-            source.sendError(
-                Text.translatable("chiyoko-player.predict.unknown_item", itemName)
-                    .formatted(Formatting.RED)
-            )
-            return 0
+        if (item == null || allowed.isEmpty()) {
+            return error("chiyoko-player.predict.unknown_item", itemName)
         }
 
-        val targets = (1..count).map { index ->
-            EnchantTarget(
-                Enchantment[StringArgumentType.getString(ctx, "enchant$index")]!!,
-                IntegerArgumentType.getInteger(ctx, "level$index")
-            )
+        val tokens = StringArgumentType.getString(ctx, "enchants").split(' ').filter { it.isNotEmpty() }
+        if (tokens.size % 2 != 0) {
+            return error("chiyoko-player.predict.missing_level", tokens.last())
         }
 
-        if (targets.size != targets.toSet().size) {
-            source.sendError(
-                Text.translatable("chiyoko-player.predict.duplicate")
-                    .formatted(Formatting.RED)
-            )
-            return 0
+        val targets = mutableListOf<EnchantTarget>()
+        for ((enchantName, levelText) in tokens.chunked(2)) {
+            val enchant = Enchantment[enchantName]?.takeIf { it.id in allowed }
+                ?: return error("chiyoko-player.predict.unknown_enchant", enchantName, itemName)
+
+            val level = levelText.toIntOrNull()?.takeIf { it in 1..enchant.maxLevel }
+                ?: return error("chiyoko-player.predict.invalid_level", levelText, enchantName, enchant.maxLevel)
+
+            for (other in targets) {
+                if (other.enchantment == enchant) {
+                    return error("chiyoko-player.predict.duplicate")
+                }
+                if (!Enchantment.areCompatible(other.enchantment, enchant)) {
+                    return error("chiyoko-player.predict.incompatible", other.enchantment.id, enchant.id)
+                }
+            }
+
+            targets += EnchantTarget(enchant, level)
         }
 
         val start = EnchantPredictor.predictAsync(item, targets) { outcome ->
             when (outcome) {
                 is EnchantPredictor.Outcome.Found -> source.sendFeedback(resultMessage(outcome.result))
                 EnchantPredictor.Outcome.NotFound -> source.sendFeedback(
-                    Text.translatable("chiyoko-player.predict.no_result").formatted(Formatting.RED)
+                    Text.translatable(
+                        "chiyoko-player.predict.no_result",
+                        EnchantPredictor.MAX_DROPS / 64
+                    ).formatted(Formatting.RED)
                 )
                 EnchantPredictor.Outcome.TimedOut -> source.sendError(
                     Text.translatable("chiyoko-player.predict.timed_out").formatted(Formatting.RED)
@@ -204,6 +207,13 @@ object PredictEnchant {
 
         when (start) {
             EnchantPredictor.Start.NOT_CRACKED -> {
+                // predicts by itself once auto crack finishes
+                if (AutoCracker.start { execute(source, ctx) }) {
+                    source.sendFeedback(
+                        Text.translatable("chiyoko-player.predict.autocracking").formatted(Formatting.GRAY)
+                    )
+                    return 1
+                }
                 source.sendError(Text.translatable("chiyoko-player.predict.not_cracked").formatted(Formatting.RED))
                 return 0
             }

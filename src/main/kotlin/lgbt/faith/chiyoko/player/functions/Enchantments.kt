@@ -4,90 +4,120 @@ import net.minecraft.item.Item
 import net.minecraft.item.Items
 
 object Enchantability {
-    const val WOOD        = 15
-    const val STONE       = 5
-    const val IRON        = 9
-    const val CHAIN       = 9
-    const val GOLD        = 25
-    const val DIAMOND     = 10
-    const val NETHERITE   = 15
-    const val LEATHER     = 15
+    const val WOOD_TOOL       = 15
+    const val STONE_TOOL      = 5
+    const val COPPER_TOOL     = 13
+    const val IRON_TOOL       = 14
+    const val GOLD_TOOL       = 22
+    const val DIAMOND_TOOL    = 10
+    const val NETHERITE_TOOL  = 15
+    const val LEATHER_ARMOR   = 15
+    const val COPPER_ARMOR    = 8
+    const val CHAIN_ARMOR     = 12
+    const val IRON_ARMOR      = 9
+    const val GOLD_ARMOR      = 25
+    const val DIAMOND_ARMOR   = 10
+    const val NETHERITE_ARMOR = 15
+    const val TURTLE_ARMOR    = 9
     const val BOOK        = 1
-    const val TURTLE      = 9
     const val TRIDENT     = 1
     const val BOW         = 1
     const val CROSSBOW    = 1
     const val FISHING_ROD = 1
+    const val MACE        = 15
     fun getEnchantability(item: Item): Int {
         return when (item) {
             Items.WOODEN_SWORD,
             Items.WOODEN_AXE,
             Items.WOODEN_PICKAXE,
             Items.WOODEN_SHOVEL,
-            Items.WOODEN_HOE -> WOOD
+            Items.WOODEN_HOE,
+            Items.WOODEN_SPEAR -> WOOD_TOOL
 
             Items.STONE_SWORD,
             Items.STONE_AXE,
             Items.STONE_PICKAXE,
             Items.STONE_SHOVEL,
-            Items.STONE_HOE -> STONE
+            Items.STONE_HOE,
+            Items.STONE_SPEAR -> STONE_TOOL
+
+            Items.COPPER_SWORD,
+            Items.COPPER_AXE,
+            Items.COPPER_PICKAXE,
+            Items.COPPER_SHOVEL,
+            Items.COPPER_HOE,
+            Items.COPPER_SPEAR -> COPPER_TOOL
 
             Items.IRON_SWORD,
             Items.IRON_AXE,
             Items.IRON_PICKAXE,
             Items.IRON_SHOVEL,
             Items.IRON_HOE,
-            Items.IRON_HELMET,
-            Items.IRON_CHESTPLATE,
-            Items.IRON_LEGGINGS,
-            Items.IRON_BOOTS -> IRON
-
-            Items.CHAINMAIL_HELMET,
-            Items.CHAINMAIL_CHESTPLATE,
-            Items.CHAINMAIL_LEGGINGS,
-            Items.CHAINMAIL_BOOTS -> CHAIN
+            Items.IRON_SPEAR -> IRON_TOOL
 
             Items.GOLDEN_SWORD,
             Items.GOLDEN_AXE,
             Items.GOLDEN_PICKAXE,
             Items.GOLDEN_SHOVEL,
             Items.GOLDEN_HOE,
-            Items.GOLDEN_HELMET,
-            Items.GOLDEN_CHESTPLATE,
-            Items.GOLDEN_LEGGINGS,
-            Items.GOLDEN_BOOTS -> GOLD
+            Items.GOLDEN_SPEAR -> GOLD_TOOL
 
             Items.DIAMOND_SWORD,
             Items.DIAMOND_AXE,
             Items.DIAMOND_PICKAXE,
             Items.DIAMOND_SHOVEL,
             Items.DIAMOND_HOE,
-            Items.DIAMOND_HELMET,
-            Items.DIAMOND_CHESTPLATE,
-            Items.DIAMOND_LEGGINGS,
-            Items.DIAMOND_BOOTS -> DIAMOND
+            Items.DIAMOND_SPEAR -> DIAMOND_TOOL
 
             Items.NETHERITE_SWORD,
             Items.NETHERITE_AXE,
             Items.NETHERITE_PICKAXE,
             Items.NETHERITE_SHOVEL,
             Items.NETHERITE_HOE,
-            Items.NETHERITE_HELMET,
-            Items.NETHERITE_CHESTPLATE,
-            Items.NETHERITE_LEGGINGS,
-            Items.NETHERITE_BOOTS -> NETHERITE
+            Items.NETHERITE_SPEAR -> NETHERITE_TOOL
 
             Items.LEATHER_HELMET,
             Items.LEATHER_CHESTPLATE,
             Items.LEATHER_LEGGINGS,
-            Items.LEATHER_BOOTS -> LEATHER
+            Items.LEATHER_BOOTS -> LEATHER_ARMOR
 
-            Items.TURTLE_HELMET -> TURTLE
+            Items.COPPER_HELMET,
+            Items.COPPER_CHESTPLATE,
+            Items.COPPER_LEGGINGS,
+            Items.COPPER_BOOTS -> COPPER_ARMOR
+
+            Items.CHAINMAIL_HELMET,
+            Items.CHAINMAIL_CHESTPLATE,
+            Items.CHAINMAIL_LEGGINGS,
+            Items.CHAINMAIL_BOOTS -> CHAIN_ARMOR
+
+            Items.IRON_HELMET,
+            Items.IRON_CHESTPLATE,
+            Items.IRON_LEGGINGS,
+            Items.IRON_BOOTS -> IRON_ARMOR
+
+            Items.GOLDEN_HELMET,
+            Items.GOLDEN_CHESTPLATE,
+            Items.GOLDEN_LEGGINGS,
+            Items.GOLDEN_BOOTS -> GOLD_ARMOR
+
+            Items.DIAMOND_HELMET,
+            Items.DIAMOND_CHESTPLATE,
+            Items.DIAMOND_LEGGINGS,
+            Items.DIAMOND_BOOTS -> DIAMOND_ARMOR
+
+            Items.NETHERITE_HELMET,
+            Items.NETHERITE_CHESTPLATE,
+            Items.NETHERITE_LEGGINGS,
+            Items.NETHERITE_BOOTS -> NETHERITE_ARMOR
+
+            Items.TURTLE_HELMET -> TURTLE_ARMOR
 
             Items.BOW -> BOW
             Items.CROSSBOW -> CROSSBOW
             Items.TRIDENT -> TRIDENT
             Items.FISHING_ROD -> FISHING_ROD
+            Items.MACE -> MACE
 
             Items.BOOK,
             Items.ENCHANTED_BOOK -> BOOK
@@ -203,7 +233,7 @@ object EligibleEnchantments {
     val HOE = AXE
     val HELMET = setOf(
         "protection", "fire_protection", "blast_protection", "projectile_protection",
-        "respiration", "aqua_affinity", "thorns", "unbreaking", "mending", "vanishing_curse", "binding_curse",
+        "respiration", "aqua_affinity", "unbreaking", "mending", "vanishing_curse", "binding_curse",
     )
     val CHESTPLATE = setOf(
         "protection", "fire_protection", "blast_protection", "projectile_protection",
@@ -211,12 +241,16 @@ object EligibleEnchantments {
     )
     val LEGGINGS = setOf(
         "protection", "fire_protection", "blast_protection", "projectile_protection",
-        "swift_sneak", "thorns", "unbreaking", "mending", "vanishing_curse", "binding_curse",
+        "swift_sneak", "unbreaking", "mending", "vanishing_curse", "binding_curse",
     )
     val BOOTS = setOf(
         "protection", "fire_protection", "blast_protection", "projectile_protection",
         "feather_falling", "depth_strider", "frost_walker", "soul_speed",
-        "thorns", "unbreaking", "mending", "vanishing_curse", "binding_curse",
+        "unbreaking", "mending", "vanishing_curse", "binding_curse",
+    )
+    val SPEAR = setOf(
+        "sharpness", "smite", "bane_of_arthropods", "knockback",
+        "fire_aspect", "looting", "lunge", "unbreaking", "mending", "vanishing_curse",
     )
     val BOW = setOf(
         "power", "punch", "flame", "infinity", "unbreaking", "mending", "vanishing_curse",
@@ -231,8 +265,7 @@ object EligibleEnchantments {
         "luck_of_the_sea", "lure", "unbreaking", "mending", "vanishing_curse",
     )
     val MACE = setOf(
-        "density", "breach", "wind_burst", "fire_aspect", "smite", "bane_of_arthropods",
-        "knockback", "unbreaking", "mending", "vanishing_curse",
+        "density", "breach", "wind_burst", "unbreaking", "mending", "vanishing_curse",
     )
     val BOOK = Enchantment.ALL.map { it.id }.toSet()
     val FISHING = BOOK.filter { it !in listOf("wind_burst", "soul_speed", "swift_sneak")}.toSet() // only found in certain structures
@@ -250,6 +283,7 @@ object EligibleEnchantments {
 
             Items.WOODEN_SWORD,
             Items.STONE_SWORD,
+            Items.COPPER_SWORD,
             Items.IRON_SWORD,
             Items.GOLDEN_SWORD,
             Items.DIAMOND_SWORD,
@@ -257,6 +291,7 @@ object EligibleEnchantments {
 
             Items.WOODEN_AXE,
             Items.STONE_AXE,
+            Items.COPPER_AXE,
             Items.IRON_AXE,
             Items.GOLDEN_AXE,
             Items.DIAMOND_AXE,
@@ -264,6 +299,7 @@ object EligibleEnchantments {
 
             Items.WOODEN_PICKAXE,
             Items.STONE_PICKAXE,
+            Items.COPPER_PICKAXE,
             Items.IRON_PICKAXE,
             Items.GOLDEN_PICKAXE,
             Items.DIAMOND_PICKAXE,
@@ -271,6 +307,7 @@ object EligibleEnchantments {
 
             Items.WOODEN_SHOVEL,
             Items.STONE_SHOVEL,
+            Items.COPPER_SHOVEL,
             Items.IRON_SHOVEL,
             Items.GOLDEN_SHOVEL,
             Items.DIAMOND_SHOVEL,
@@ -278,10 +315,19 @@ object EligibleEnchantments {
 
             Items.WOODEN_HOE,
             Items.STONE_HOE,
+            Items.COPPER_HOE,
             Items.IRON_HOE,
             Items.GOLDEN_HOE,
             Items.DIAMOND_HOE,
             Items.NETHERITE_HOE -> HOE
+
+            Items.WOODEN_SPEAR,
+            Items.STONE_SPEAR,
+            Items.COPPER_SPEAR,
+            Items.IRON_SPEAR,
+            Items.GOLDEN_SPEAR,
+            Items.DIAMOND_SPEAR,
+            Items.NETHERITE_SPEAR -> SPEAR
 
             Items.BOW -> BOW
             Items.CROSSBOW -> CROSSBOW
@@ -290,6 +336,7 @@ object EligibleEnchantments {
             Items.MACE -> MACE
 
             Items.LEATHER_HELMET,
+            Items.COPPER_HELMET,
             Items.CHAINMAIL_HELMET,
             Items.IRON_HELMET,
             Items.GOLDEN_HELMET,
@@ -298,6 +345,7 @@ object EligibleEnchantments {
             Items.TURTLE_HELMET -> HELMET
 
             Items.LEATHER_CHESTPLATE,
+            Items.COPPER_CHESTPLATE,
             Items.CHAINMAIL_CHESTPLATE,
             Items.IRON_CHESTPLATE,
             Items.GOLDEN_CHESTPLATE,
@@ -305,6 +353,7 @@ object EligibleEnchantments {
             Items.NETHERITE_CHESTPLATE -> CHESTPLATE
 
             Items.LEATHER_LEGGINGS,
+            Items.COPPER_LEGGINGS,
             Items.CHAINMAIL_LEGGINGS,
             Items.IRON_LEGGINGS,
             Items.GOLDEN_LEGGINGS,
@@ -312,6 +361,7 @@ object EligibleEnchantments {
             Items.NETHERITE_LEGGINGS -> LEGGINGS
 
             Items.LEATHER_BOOTS,
+            Items.COPPER_BOOTS,
             Items.CHAINMAIL_BOOTS,
             Items.IRON_BOOTS,
             Items.GOLDEN_BOOTS,

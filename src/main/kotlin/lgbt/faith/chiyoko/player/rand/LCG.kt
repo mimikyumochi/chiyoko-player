@@ -23,7 +23,9 @@ class LCG(var seed: Long = 0) {
         seed = (newSeed xor multiplier) and mask
         return seed
     }
-
+    fun nextLong(): Long {
+        return (next(32).toLong() shl 32) + next(32)
+    }
     fun nextInt(bound: Int): Int {
         require(bound > 0)
         if ((bound and -bound) == bound) {

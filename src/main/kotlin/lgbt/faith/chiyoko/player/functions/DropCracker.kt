@@ -7,7 +7,7 @@ import lgbt.faith.chiyoko.player.rand.LCG
 import lgbt.faith.chiyoko.player.sendOverlay
 import net.minecraft.util.Formatting
 import net.minecraft.client.MinecraftClient
-import net.minecraft.text.Text
+import net.minecraft.client.network.ClientPlayerEntity
 import net.minecraft.util.math.MathHelper
 import net.minecraft.util.math.Vec3d
 import org.slf4j.LoggerFactory
@@ -28,23 +28,10 @@ object DropCracker {
     // rotation is null when the player turned just before the drop
     data class DropObservation(val xRot: Float?, val yRot: Float?, val movement: Vec3d)
 
-    private data class PlayerSnapshot(
-        val entityId: Int,
-        val dimension: Any,
-        val x: Double, val y: Double, val z: Double,
-        val health: Float,
-        val absorption: Float,
-        val food: Int,
-        val xpLevel: Int,
-        val xpProgress: Float,
-        val usingItem: Boolean,
-    )
-
     private const val BITS_TO_SOLVE = 50.0
     private const val MAX_CANDIDATES = 256L
     private const val ROTATION_SETTLE_MS = 1000L
     private const val POSITION_EPSILON = 1.0E-4
-    private const val XP_ACTION_MS = 3000L
     private const val SHARED_RNG_MAX_GAP = 32
     private const val SHARED_RNG_MAX_ANGLE = 0.5
     private const val SHARED_RNG_LENGTH_EPSILON = 1.5E-4
@@ -55,16 +42,30 @@ object DropCracker {
     private val observations = mutableListOf<DropObservation>()
     private var generation = 0
     private var solving = false
-    private var lastSnapshot: PlayerSnapshot? = null
     private var lastSentRot: Pair<Float, Float>? = null
     private var lastRotChangeMs = 0L
-    private var xpActionDeadline = 0L
-    private var sharedRng = false
+    // lastRotChangeMs at each drop we threw ourselves, oldest first
+    private val sentDropRotStamps = ArrayDeque<Long>()
     private var sharedRngHits = 0
 
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "chiyoko-drop-cracker").apply { isDaemon = true } }
 
-    // resets whenever something might have used player rng
+    val hasObservations: Boolean get() = observations.isNotEmpty()
+
+    val rotationSettled: Boolean get() = System.currentTimeMillis() - lastRotChangeMs >= ROTATION_SETTLE_MS
+
+    // the server already has the rotation the player has now
+    fun rotationSent(player: ClientPlayerEntity): Boolean {
+        val accessor = player as LocalPlayerAccessor
+        return accessor.chiyoko_getXRotLast() == player.pitch && accessor.chiyoko_getYRotLast() == player.yaw
+    }
+
+    // call right after throwing an item, once rotationSent is true
+    fun onDropSent() {
+        sentDropRotStamps.addLast(lastRotChangeMs)
+    }
+
+    // tracks when the rotation the server knows about last changed
     fun tick(mc: MinecraftClient) {
         val player = mc.player ?: return
 
@@ -74,69 +75,18 @@ object DropCracker {
             lastSentRot = rot
             lastRotChangeMs = System.currentTimeMillis()
         }
-
-        val snapshot = PlayerSnapshot(
-            entityId = player.id,
-            dimension = player.entityWorld.registryKey,
-            x = player.x, y = player.y, z = player.z,
-            health = player.health,
-            absorption = player.absorptionAmount,
-            food = player.hungerManager.foodLevel,
-            xpLevel = player.experienceLevel,
-            xpProgress = player.experienceProgress,
-            usingItem = player.isUsingItem,
-        )
-
-        val last = lastSnapshot
-        lastSnapshot = snapshot
-        if (last == null) return
-
-        val reason = when {
-            last.entityId != snapshot.entityId || last.dimension != snapshot.dimension -> "respawned"
-            abs(last.x - snapshot.x) > POSITION_EPSILON ||
-                abs(last.y - snapshot.y) > POSITION_EPSILON ||
-                abs(last.z - snapshot.z) > POSITION_EPSILON -> "moved"
-            last.health != snapshot.health || last.absorption != snapshot.absorption -> "health"
-            last.food != snapshot.food -> "hunger"
-            last.xpLevel != snapshot.xpLevel || last.xpProgress != snapshot.xpProgress -> {
-                // xp spent on an enchant or anvil we already stepped the rng for
-                if (System.currentTimeMillis() <= xpActionDeadline) return
-                "xp"
-            }
-            snapshot.usingItem -> "item_use"
-            else -> return
-        }
-        reset(reason)
     }
 
-    fun reset(reason: String? = null) {
-        val hadProgress = observations.isNotEmpty() || EnchantPredictor.entityLCG != null
+    // also drops any solve still running since its drops are gone
+    fun clearObservations() {
         observations.clear()
         generation++
-        EnchantPredictor.entityLCG = null
-        if (reason != null && hadProgress) {
-            sendOverlay("chiyoko-player.rng.reset", Formatting.YELLOW, Text.translatable("chiyoko-player.rng.reset.$reason"))
-        }
-    }
-
-    // enchanting and anvils spend xp and use player rng
-    // step the cracked rng by the same calls instead of resetting on the xp change
-    fun onXpAction(advance: LCG.() -> Unit) {
-        val known = EnchantPredictor.entityLCG
-        if (known == null) {
-            // drops before this cant be chained to drops after it
-            reset("xp")
-            return
-        }
-        known.advance()
-        xpActionDeadline = System.currentTimeMillis() + XP_ACTION_MS
     }
 
     fun clear() {
-        reset()
-        sharedRng = false
+        sentDropRotStamps.clear()
+        clearObservations()
         sharedRngHits = 0
-        lastSnapshot = null
         lastSentRot = null
     }
 
@@ -150,7 +100,9 @@ object DropCracker {
 
         // if we turned recently the server rotation is unknown so the drop only counts as 4 skipped calls
         val accessor = player as LocalPlayerAccessor
-        val settled = System.currentTimeMillis() - lastRotChangeMs >= ROTATION_SETTLE_MS
+        // a drop we threw after the rotation was sent is exact as long as the camera hasnt moved since
+        val sentStamp = sentDropRotStamps.removeFirstOrNull()
+        val settled = rotationSettled || sentStamp == lastRotChangeMs
         val observation = if (settled) {
             DropObservation(
                 MathHelper.wrapDegrees(accessor.chiyoko_getXRotLast()),
@@ -167,12 +119,10 @@ object DropCracker {
             "${accessor.chiyoko_getXRotLast()}/${accessor.chiyoko_getYRotLast()}", settled
         )
 
-        if (sharedRng) return true
+        if (RngTracker.sharedRng) return true
         // one match can be chance so wait for a second one
         if (usesSharedRng(uuid, movement, player.pitch, player.yaw) && ++sharedRngHits >= SHARED_RNG_HITS) {
-            sharedRng = true
-            reset()
-            sendOverlay("chiyoko-player.rng.shared", Formatting.RED)
+            RngTracker.onSharedRngDetected()
             return true
         }
 
@@ -239,23 +189,14 @@ object DropCracker {
     }
 
     private fun onOwnDrop(observation: DropObservation) {
-        val known = EnchantPredictor.entityLCG
-        if (known != null) {
-            val next = known.copy()
-            if (simulateAndCompare(next, observation)) {
-                EnchantPredictor.entityLCG = next
-                return
-            }
-            reset()
-            sendOverlay("chiyoko-player.rng.desynced", Formatting.YELLOW)
-        }
+        if (RngTracker.state != null && RngTracker.observe { simulateAndCompare(this, observation) }) return
 
         observations.add(observation)
         trySolve()
     }
 
     private fun trySolve() {
-        if (solving || EnchantPredictor.entityLCG != null) return
+        if (solving || RngTracker.state != null) return
 
         val snapshot = observations.toList()
         val bits = snapshot.sumOf { constraintsFor(it)?.bits ?: 0.0 }
@@ -298,9 +239,7 @@ object DropCracker {
 
         when {
             matches.size == 1 -> {
-                EnchantPredictor.entityLCG = matches.first()
-                observations.clear()
-                sendOverlay("chiyoko-player.rng.cracked", Formatting.GREEN)
+                RngTracker.onStateCracked(matches.first())
             }
             matches.isEmpty() && candidates.size < MAX_CANDIDATES -> {
                 // nothing matched so the first drop was probably bad
@@ -388,8 +327,8 @@ object DropCracker {
 
         val tolerance = quantization(drop.movement) * 1.5
         return abs(vx - drop.movement.x) <= tolerance &&
-            abs(vy - drop.movement.y) <= tolerance &&
-            abs(vz - drop.movement.z) <= tolerance
+                abs(vy - drop.movement.y) <= tolerance &&
+                abs(vz - drop.movement.z) <= tolerance
     }
 
     private fun baseVelocity(xRot: Float, yRot: Float): Triple<Double, Float, Double> {

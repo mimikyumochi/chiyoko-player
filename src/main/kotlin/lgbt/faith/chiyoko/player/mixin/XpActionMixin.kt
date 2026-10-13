@@ -1,6 +1,7 @@
 package lgbt.faith.chiyoko.player.mixin
 
-import lgbt.faith.chiyoko.player.functions.DropCracker
+import lgbt.faith.chiyoko.player.functions.RngTracker
+import lgbt.faith.chiyoko.player.rand.LCG
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.network.ClientPlayerInteractionManager
 import net.minecraft.entity.player.PlayerEntity
@@ -19,7 +20,7 @@ abstract class AnvilMenuMixin {
     @Inject(method = ["onTakeOutput"], at = [At("HEAD")])
     private fun onTakeResult(player: PlayerEntity, carried: ItemStack, ci: CallbackInfo) {
         if (!player.entityWorld.isClient() || player.isInCreativeMode()) return
-        DropCracker.onXpAction { nextFloat() }
+        RngTracker.onXpAction { nextFloat() }
     }
 }
 
@@ -32,6 +33,6 @@ abstract class EnchantButtonMixin {
     private fun onButtonClick(containerId: Int, buttonId: Int, ci: CallbackInfo) {
         val menu = MinecraftClient.getInstance().player?.currentScreenHandler as? EnchantmentScreenHandler ?: return
         if (menu.syncId != containerId || buttonId !in 0..2) return
-        DropCracker.onXpAction { nextInt() }
+        RngTracker.onXpAction { nextInt() }
     }
 }

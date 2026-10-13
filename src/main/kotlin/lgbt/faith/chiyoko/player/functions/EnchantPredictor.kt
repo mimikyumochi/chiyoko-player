@@ -17,8 +17,6 @@ data class EnchantTarget(
 )
 
 object EnchantPredictor {
-    var entityLCG: LCG? = null
-
     data class Result(val drops: Int, val bookshelves: Int, val slot: Int)
 
     sealed interface Outcome {
@@ -33,6 +31,7 @@ object EnchantPredictor {
     enum class Start { STARTED, NOT_CRACKED, BUSY }
 
     private const val TIMEOUT_MS = 10_000L
+    const val MAX_DROPS = 4096
 
     private val LOGGER = LoggerFactory.getLogger("chiyoko-player")
 
@@ -48,7 +47,7 @@ object EnchantPredictor {
 
     // onDone runs on the main thread
     fun predictAsync(item: Item, targets: List<EnchantTarget>, onDone: (Outcome) -> Unit): Start {
-        val base = entityLCG?.copy() ?: return Start.NOT_CRACKED
+        val base = RngTracker.state?.copy() ?: return Start.NOT_CRACKED
 
         try {
             executor.execute {
@@ -64,7 +63,7 @@ object EnchantPredictor {
 
                 val mc = MinecraftClient.getInstance()
                 mc.execute {
-                    onDone(if (outcome is Outcome.Found && entityLCG?.seed != base.seed) Outcome.Stale else outcome)
+                    onDone(if (outcome is Outcome.Found && RngTracker.state?.seed != base.seed) Outcome.Stale else outcome)
                 }
             }
         } catch (_: RejectedExecutionException) {
@@ -73,7 +72,7 @@ object EnchantPredictor {
         return Start.STARTED
     }
 
-    private fun predict(base: LCG, item: Item, targets: List<EnchantTarget>, maxDrops: Int = 4096, deadline: Long): Result? {
+    private fun predict(base: LCG, item: Item, targets: List<EnchantTarget>, maxDrops: Int = MAX_DROPS, deadline: Long): Result? {
         val (enchantability, eligible) = ItemEnchantData.of(item)
 
         // state after n item throws
