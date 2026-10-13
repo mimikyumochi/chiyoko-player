@@ -8,9 +8,12 @@
     "AbstractContainerMenuMixin",
     "LocalPlayerAccessor",
     "DropObserverMixin",
+    "EquipObserverMixin",
     "AnvilScreenMixin",
     "AnvilMenuMixin",
-    "EnchantButtonMixin"
+    "EnchantButtonMixin",
+    "CommandSuggestionsMixin",
+    "AutoCrackMixin"
   ],
   "injectors": {
     "defaultRequire": 1

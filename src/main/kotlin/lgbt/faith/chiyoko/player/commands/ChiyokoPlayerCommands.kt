@@ -9,5 +9,6 @@ object ChiyokoPlayerCommands {
         dispatcher: CommandDispatcher<FabricClientCommandSource>
     ) {
         PredictEnchant.register(dispatcher)
+        AutoCrackCommand.register(dispatcher)
     }
 }
